@@ -174,7 +174,7 @@ body{min-height:100vh;display:flex;flex-direction:column}
    C'est la règle posée dès le premier jour — pas ajoutée après.
    ═══════════════════════════════════════════════════════════════ */
 
-const KEY = "samari_agent_v1";
+const KEY = "samari_agent_v3";
 const CLUBS = [
   { id: "samari-porto", nom: "Samari Club", ville: "Porto-Novo" },
   { id: "samari-cotonou", nom: "Samari Cotonou", ville: "Cotonou" }
@@ -257,15 +257,15 @@ function seed() {
     club: "samari-porto",
     user: "u1",
     membres: [
-      { id:1, club_id:"samari-porto", nom:"Ayaba Christelle", tel:"+229 97 12 34 56", form:"Mensuel", fin:d(18) },
-      { id:2, club_id:"samari-porto", nom:"Dossou Marie", tel:"+229 96 45 78 12", form:"Mensuel", fin:d(4) },
-      { id:3, club_id:"samari-porto", nom:"Kpadonou Serge", tel:"+229 95 33 21 90", form:"Trimestriel", fin:d(62) },
-      { id:4, club_id:"samari-porto", nom:"Houngbédji Ange", tel:"+229 97 88 44 20", form:"Annuel", fin:d(210) },
-      { id:5, club_id:"samari-porto", nom:"Bocco Rachidatou", tel:"+229 96 21 55 33", form:"Mensuel", fin:d(2) },
-      { id:6, club_id:"samari-porto", nom:"Agossou Bienvenu", tel:"+229 94 77 11 02", form:"Mensuel", fin:d(11) },
-      { id:7, club_id:"samari-porto", nom:"Tossou Léonie", tel:"+229 97 60 40 08", form:"Trimestriel", fin:d(48) },
-      { id:8, club_id:"samari-porto", nom:"Zinsou Modeste", tel:"+229 95 12 88 76", form:"Mensuel", fin:d(23) },
-      { id:9, club_id:"samari-porto", nom:"Ahouandjinou Rose", tel:"+229 96 99 30 45", form:"Mensuel", fin:d(6) },
+      { id:1, club_id:"samari-porto", nom:"Ayaba Christelle", tel:"+229 97 12 34 56", form:"Mensuel", fin:d(18), coach:"Serge" },
+      { id:2, club_id:"samari-porto", nom:"Dossou Marie", tel:"+229 96 45 78 12", form:"Mensuel", fin:d(4), coach:"Serge" },
+      { id:3, club_id:"samari-porto", nom:"Kpadonou Serge", tel:"+229 95 33 21 90", form:"Trimestriel", fin:d(62), coach:"Abou" },
+      { id:4, club_id:"samari-porto", nom:"Houngbédji Ange", tel:"+229 97 88 44 20", form:"Annuel", fin:d(210), coach:"Serge" },
+      { id:5, club_id:"samari-porto", nom:"Bocco Rachidatou", tel:"+229 96 21 55 33", form:"Mensuel", fin:d(2), coach:"Abou" },
+      { id:6, club_id:"samari-porto", nom:"Agossou Bienvenu", tel:"+229 94 77 11 02", form:"Mensuel", fin:d(11), coach:"Serge" },
+      { id:7, club_id:"samari-porto", nom:"Tossou Léonie", tel:"+229 97 60 40 08", form:"Trimestriel", fin:d(48), coach:"Abou" },
+      { id:8, club_id:"samari-porto", nom:"Zinsou Modeste", tel:"+229 95 12 88 76", form:"Mensuel", fin:d(23), coach:"Serge" },
+      { id:9, club_id:"samari-porto", nom:"Ahouandjinou Rose", tel:"+229 96 99 30 45", form:"Mensuel", fin:d(6), coach:"Abou" },
       /* club 2 — pour prouver le cloisonnement */
       { id:20, club_id:"samari-cotonou", nom:"Adjovi Paul", tel:"+229 97 00 11 22", form:"Mensuel", fin:d(12) },
       { id:21, club_id:"samari-cotonou", nom:"Sossou Gisèle", tel:"+229 96 33 44 55", form:"Trimestriel", fin:d(75) }
@@ -359,9 +359,10 @@ function scope() {
   };
 
   const membres = g("membres");
-  /* un adhérent ne voit que sa propre fiche */
-  const membresVisibles = r === "adherent"
-    ? membres.filter(m => norm(m.nom) === norm(u.membre))
+  /* un adhérent ne voit que sa fiche ; un coach ne voit que SES adhérents */
+  const membresVisibles =
+      r === "adherent" ? membres.filter(m => norm(m.nom) === norm(u.membre))
+    : r === "coach"    ? membres.filter(m => norm(m.coach) === norm(u.coach))
     : membres;
 
   return {
@@ -372,7 +373,9 @@ function scope() {
     ops:     peut("finances") ? g("ops") : [],
     pres:    r === "adherent"
                ? g("pres").filter(p => norm(p.membre) === norm(u.membre))
-               : g("pres"),
+               : r === "coach"
+                 ? g("pres").filter(p => membresVisibles.some(m => norm(m.nom) === norm(p.membre)))
+                 : g("pres"),
     cours:   g("cours"),
     avis:    r === "adherent"
                ? g("avis").filter(a => norm(a.membre) === norm(u.membre))
@@ -952,15 +955,16 @@ function send(txt) {
 function switchUser(id) {
   DB.user = id; save();
   const u = me();
-  const c = clubOf(DB.club);
   if (u.club_id !== DB.club) { DB.club = u.club_id; save(); document.getElementById("clubsw").value = DB.club; }
+  const c = clubOf(DB.club);
   document.getElementById("clubName").textContent = c.nom;
   refreshHeader();
   renderGrid();
   chat.innerHTML = "";
+  const acces = MODS.filter(m => peut(m[0])).map(m => m[2]);
   bulle("ag", `Vous êtes connecté en **${u.nom}** — rôle **${ROLES[u.role].libelle}**.
     ${ROLES[u.role].desc}.
-    <ul>${MODS.filter(m => peut(m[0])).map(m => `<li>${m[2]}</li>`).join("")}</ul>`);
+    <ul>${acces.map(a => `<li>${a}</li>`).join("")}</ul>`);
 }
 
 /* ═══ CLUBS ═══ */
