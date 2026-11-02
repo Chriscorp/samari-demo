@@ -594,8 +594,9 @@ function penser(q) {
     return tool.payer({ nom, montant: mnt ? parseInt(mnt[1].replace(/\s/g,""),10) : null });
   }
 
-  /* ajout d'adhérent */
-  if (/(ajout|cr[ée]|inscri|nouvel? adh|enregistr).*(adh|membre|client)|^(ajoute|ajouter|cree|créer)/.test(s)) {
+  /* ajout d'adhérent — resserré : doit mentionner adhérent/membre/client */
+  if (/(ajout|cr[ée]|inscri|nouvel|enregistr)[a-z]*\s*(?:un |une |le |la )?(?:nouvel |nouvelle )?(?:adh[ée]rent|membre|client)/.test(s)
+      || /^(ajoute|ajouter|cree|créer)\s+[A-ZÀ-Ý]/.test(q)) {
     const nom = extraireNom(q);
     if (!nom || nom.split(/\s+/).length < 1) return { ok:false, msg:"Quel nom dois-je enregistrer ?" };
     const tel = q.match(/(\+?\d[\d\s]{7,})/);
@@ -653,11 +654,12 @@ function penser(q) {
     return tool.avis();
   }
 
-  if (/personnel|[ée]quipe|staff|coach|employ|salari|qui travaille/.test(s)) return tool.personnel();
+  if (/personnel|\b[ée]quipe\b|staff|coach|employ|salari|qui travaille/.test(s)) return tool.personnel();
 
   if (/annonce|pr[ée]venir|informer|communiqu|message aux|publi(er|e)/.test(s)) {
     if (/ajout|cr[ée]|publie|nouvelle annonce|annonce que/.test(s)) {
-      const t = q.replace(/^.*?(?:annonce[rz]?|publie[rz]?|communique[rz]?)\s*(?:que\s*)?/i, "").trim();
+      const m = q.match(/(?:annonce[rz]?|publie[rz]?|communique[rz]?)\s*(?:que\s*)?[:\s]\s*(.+)$/i);
+      const t = (m ? m[1] : q).trim();
       if (t.length < 4) return { ok:false, msg:"Que faut-il annoncer ?" };
       return tool.ajouterAnnonce({ texte: t });
     }
