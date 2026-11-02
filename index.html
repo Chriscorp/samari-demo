@@ -210,6 +210,41 @@ function seed() {
       { id:2, club_id:"samari-porto", membre:"Zinsou Modeste", jour:0 },
       { id:3, club_id:"samari-porto", membre:"Tossou Léonie", jour:1 },
       { id:20, club_id:"samari-cotonou", membre:"Adjovi Paul", jour:0 }
+    ],
+    cours: [
+      { id:1, club_id:"samari-porto", jour:"Lundi", txt:"18h — Cardio", coach:"Abou" },
+      { id:2, club_id:"samari-porto", jour:"Mardi", txt:"19h — Musculation", coach:"Serge" },
+      { id:3, club_id:"samari-porto", jour:"Mercredi", txt:"18h — Cardio", coach:"Abou" },
+      { id:4, club_id:"samari-porto", jour:"Jeudi", txt:"19h — Cross-training", coach:"Serge" },
+      { id:5, club_id:"samari-porto", jour:"Vendredi", txt:"18h — Musculation", coach:"Abou" },
+      { id:6, club_id:"samari-porto", jour:"Samedi", txt:"10h — Cardio", coach:"Serge" },
+      { id:20, club_id:"samari-cotonou", jour:"Lundi", txt:"18h — Fitness", coach:"Paul" }
+    ],
+    avis: [
+      { id:1, club_id:"samari-porto", membre:"Kpadonou Serge", note:5, txt:"Ambiance au top" },
+      { id:2, club_id:"samari-porto", membre:"Tossou Léonie", note:4, txt:"Bon matériel" }
+    ],
+    personnel: [
+      { id:1, club_id:"samari-porto", nom:"Abou", role:"Administrateur" },
+      { id:2, club_id:"samari-porto", nom:"Chris", role:"Associé" },
+      { id:3, club_id:"samari-porto", nom:"Serge", role:"Coach" },
+      { id:20, club_id:"samari-cotonou", nom:"Paul", role:"Gérant" }
+    ],
+    annonces: [
+      { id:1, club_id:"samari-porto", texte:"Fermeture exceptionnelle le 15 novembre", jour:2 }
+    ],
+    bons: [
+      { id:1, club_id:"samari-porto", membre:"Dossou Marie", type:"Séance offerte", utilise:false },
+      { id:2, club_id:"samari-porto", membre:"Agossou Bienvenu", type:"10 % réduction", utilise:true }
+    ],
+    textes: [
+      { id:1, club_id:"samari-porto", nom:"Relance échéance", txt:"Bonjour {nom}, votre abonnement expire le {date}. Passez nous voir !" },
+      { id:2, club_id:"samari-porto", nom:"Bienvenue", txt:"Bienvenue {nom} au Samari Club !" }
+    ],
+    equipements: [
+      { id:1, club_id:"samari-porto", nom:"Tapis de course", etat:"Bon" },
+      { id:2, club_id:"samari-porto", nom:"Rameur", etat:"À réviser" },
+      { id:3, club_id:"samari-porto", nom:"Haltères 2–20 kg", etat:"Bon" }
     ]
   };
 }
@@ -224,7 +259,14 @@ function scope() {
     club: c,
     membres: DB.membres.filter(m => m.club_id === c),
     ops:     DB.ops.filter(o => o.club_id === c),
-    pres:    DB.pres.filter(p => p.club_id === c)
+    pres:    DB.pres.filter(p => p.club_id === c),
+    cours:   DB.cours.filter(x => x.club_id === c),
+    avis:    DB.avis.filter(x => x.club_id === c),
+    personnel: DB.personnel.filter(x => x.club_id === c),
+    annonces: DB.annonces.filter(x => x.club_id === c),
+    bons:    DB.bons.filter(x => x.club_id === c),
+    textes:  DB.textes.filter(x => x.club_id === c),
+    equipements: DB.equipements.filter(x => x.club_id === c)
   };
 }
 
@@ -324,6 +366,173 @@ const tool = {
         cls: jours(m.fin) < 0 ? "bad" : jours(m.fin) <= 7 ? "warn" : "ok"
       }))
     };
+  },
+
+  /* ═══ PLANNING ═══ */
+  planning({ jour }) {
+    const s = scope();
+    const jours7 = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
+    const l = jour
+      ? s.cours.filter(c => norm(c.jour) === norm(jour))
+      : s.cours;
+    if (!l.length && jour) return { ok:true, msg:`Aucun cours le ${jour}.` };
+    if (!l.length) return { ok:true, msg:`Aucun cours au planning.` };
+    const ordre = c => jours7.indexOf(c.jour);
+    const tri = l.slice().sort((a,b) => ordre(a) - ordre(b));
+    return {
+      ok:true,
+      msg: jour ? `**${jour}** à ${clubOf(DB.club).nom} :`
+                : `**${s.cours.length} cours** au planning de ${clubOf(DB.club).nom} :`,
+      list: tri.map(c => ({ n:c.txt, s:c.jour + (c.coach ? " · "+c.coach : ""), tag:"Cours", cls:"ok" }))
+    };
+  },
+
+  ajouterCours({ jour, txt, coach }) {
+    const jours7 = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"];
+    const j = jours7.find(x => norm(x) === norm(jour));
+    if (!j) return { ok:false, msg:`Quel jour ? (${jours7.slice(0,6).join(", ")})` };
+    DB.cours.push({ id:Date.now(), club_id:DB.club, jour:j, txt, coach: coach||"" });
+    save();
+    return { ok:true, msg:`Cours ajouté : **${txt}** le **${j}**${coach?" avec "+coach:""}.` };
+  },
+
+  /* ═══ AVIS ═══ */
+  avis() {
+    const s = scope();
+    if (!s.avis.length) return { ok:true, msg:`Aucun avis enregistré à ${clubOf(DB.club).nom}.` };
+    const moy = (s.avis.reduce((a,x) => a+x.note, 0) / s.avis.length).toFixed(1);
+    return {
+      ok:true,
+      msg:`**${s.avis.length} avis** — moyenne **${moy}/5** :`,
+      list: s.avis.map(a => ({
+        n:a.membre, s:a.txt, tag:a.note+"/5",
+        cls: a.note >= 4 ? "ok" : a.note >= 3 ? "warn" : "bad"
+      }))
+    };
+  },
+
+  ajouterAvis({ nom, note, txt }) {
+    const s = scope();
+    const m = find(s.membres, nom);
+    const n = Math.max(1, Math.min(5, parseInt(note,10) || 5));
+    DB.avis.push({ id:Date.now(), club_id:DB.club, membre: m ? m.nom : nom, note:n, txt: txt||"" });
+    save();
+    return { ok:true, msg:`Avis enregistré pour **${m?m.nom:nom}** : ${n}/5${txt?" — « "+txt+" »":""}.` };
+  },
+
+  /* ═══ PERSONNEL ═══ */
+  personnel() {
+    const s = scope();
+    return {
+      ok:true,
+      msg:`**${s.personnel.length} personne(s)** à ${clubOf(DB.club).nom} :`,
+      list: s.personnel.map(p => ({ n:p.nom, s:p.role, tag:"Actif", cls:"ok" }))
+    };
+  },
+
+  /* ═══ ANNONCES ═══ */
+  annonces() {
+    const s = scope();
+    if (!s.annonces.length) return { ok:true, msg:`Aucune annonce publiée à ${clubOf(DB.club).nom}.` };
+    return {
+      ok:true,
+      msg:`**${s.annonces.length} annonce(s)** à ${clubOf(DB.club).nom} :`,
+      list: s.annonces.map(a => ({ n:a.texte, s:"publiée il y a "+a.jour+" j", tag:"En ligne", cls:"ok" }))
+    };
+  },
+
+  ajouterAnnonce({ texte }) {
+    if (!texte || texte.length < 3) return { ok:false, msg:"Que faut-il annoncer ?" };
+    DB.annonces.push({ id:Date.now(), club_id:DB.club, texte, jour:0 });
+    save();
+    return { ok:true, msg:`Annonce publiée : « ${texte} »` };
+  },
+
+  /* ═══ BONS ═══ */
+  bons() {
+    const s = scope();
+    if (!s.bons.length) return { ok:true, msg:`Aucun bon en circulation à ${clubOf(DB.club).nom}.` };
+    const actifs = s.bons.filter(b => !b.utilise);
+    return {
+      ok:true,
+      msg:`**${actifs.length} bon(s) actif(s)** sur ${s.bons.length} :`,
+      list: s.bons.map(b => ({
+        n:b.membre, s:b.type, tag: b.utilise ? "Utilisé" : "Actif",
+        cls: b.utilise ? "bad" : "ok"
+      }))
+    };
+  },
+
+  ajouterBon({ nom, type }) {
+    const s = scope();
+    const m = find(s.membres, nom);
+    if (!m) return { ok:false, msg:`Je ne trouve pas **${nom}** dans ce club.` };
+    DB.bons.push({ id:Date.now(), club_id:DB.club, membre:m.nom, type: type||"Séance offerte", utilise:false });
+    save();
+    return { ok:true, msg:`Bon créé pour **${m.nom}** : ${type||"Séance offerte"}.` };
+  },
+
+  /* ═══ TEXTES ═══ */
+  textes() {
+    const s = scope();
+    if (!s.textes.length) return { ok:true, msg:`Aucun modèle de message à ${clubOf(DB.club).nom}.` };
+    return {
+      ok:true,
+      msg:`**${s.textes.length} modèle(s)** de message :`,
+      list: s.textes.map(t => ({ n:t.nom, s:t.txt.slice(0,56)+"…", tag:"Modèle", cls:"ok" }))
+    };
+  },
+
+  /* ═══ ÉQUIPEMENTS ═══ */
+  equipements() {
+    const s = scope();
+    if (!s.equipements.length) return { ok:true, msg:`Aucun équipement enregistré.` };
+    const aRevoir = s.equipements.filter(e => norm(e.etat) !== "bon").length;
+    return {
+      ok:true,
+      msg:`**${s.equipements.length} équipement(s)** — ${aRevoir} à réviser :`,
+      list: s.equipements.map(e => ({
+        n:e.nom, s:"état : "+e.etat, tag:e.etat,
+        cls: norm(e.etat) === "bon" ? "ok" : "warn"
+      }))
+    };
+  },
+
+  /* ═══ ADMINISTRATIF ═══ */
+  administratif() {
+    const s = scope(), c = clubOf(DB.club);
+    return {
+      ok:true,
+      msg:`**${c.nom}** — fiche du club :`,
+      list: [
+        { n:"Club", s:c.ville+" · Bénin", tag:"Actif", cls:"ok" },
+        { n:"Adhérents", s:"dans ce club uniquement", tag:String(s.membres.length), cls:"ok" },
+        { n:"Personnel", s:"comptes rattachés", tag:String(s.personnel.length), cls:"ok" },
+        { n:"Cloisonnement", s:"club_id = "+c.id, tag:"Isolé", cls:"ok" },
+        { n:"Autres clubs", s:"non accessibles depuis ici", tag:String(CLUBS.length-1), cls:"warn" }
+      ]
+    };
+  },
+
+  /* ═══ RAPPORTS ═══ */
+  rapports() {
+    const s = scope();
+    const R = s.ops.filter(o => o.type === "recette").reduce((a,o) => a+o.montant, 0);
+    const D = s.ops.filter(o => o.type === "depense").reduce((a,o) => a+o.montant, 0);
+    const actifs = s.membres.filter(m => jours(m.fin) >= 0).length;
+    const pres = s.pres.filter(p => p.jour === 0).length;
+    return {
+      ok:true,
+      msg:`**Rapport** — ${clubOf(DB.club).nom} :`,
+      list: [
+        { n:"Adhérents actifs", s:"abonnements en cours", tag:String(actifs), cls:"ok" },
+        { n:"Présences aujourd'hui", s:"pointages enregistrés", tag:String(pres), cls:"ok" },
+        { n:"Recettes", s:"cumul depuis le début", tag:R.toLocaleString("fr-FR")+" F", cls:"ok" },
+        { n:"Dépenses", s:"cumul depuis le début", tag:D.toLocaleString("fr-FR")+" F", cls:"bad" },
+        { n:"Résultat", s:"recettes − dépenses", tag:(R-D).toLocaleString("fr-FR")+" F", cls:(R-D)>=0?"ok":"bad" },
+        { n:"Taux de présence", s:"aujourd'hui / adhérents", tag: actifs ? Math.round(pres/actifs*100)+" %" : "—", cls:"warn" }
+      ]
+    };
   }
 };
 
@@ -403,22 +612,84 @@ function penser(q) {
     return tool.stats();
   }
 
-  /* liste */
-  if (/(liste|qui est|montre|affiche|tous les|adh[ée]rents)/.test(s)) return tool.lister();
+  /* liste des adhérents — resserré pour ne pas capter les autres modules */
+  if (/(liste|montre|affiche|tous les|voir les|combien de).*(adh[ée]rent|membre|client)|^adh[ée]rents?$|^(les )?adh[ée]rents$/.test(s)) return tool.lister();
+
+  /* ═══ MODULES SPÉCIALISÉS ═══ */
+
+  if (/planning|cours|s[ée]ance|entra[îi]nement|programme/.test(s)) {
+    const j = ["lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"]
+      .find(x => s.includes(x));
+    if (/ajout|cr[ée]|programme un|nouveau cours/.test(s)) {
+      const jour = j ? j.charAt(0).toUpperCase()+j.slice(1) : null;
+      const h = q.match(/(\d{1,2})\s*h\s*(\d{0,2})/);
+      const nomC = q.match(/(cardio|musculation|cross[\s-]?training|fitness|yoga|boxe|zumba|abdo|mobilit[ée])/i);
+      if (!jour) return { ok:false, msg:"Quel jour ? (Lundi, Mardi, Mercredi…)" };
+      const txt = (h ? h[1]+"h"+(h[2]||"")+" — " : "") +
+        (nomC ? nomC[1].charAt(0).toUpperCase()+nomC[1].slice(1).toLowerCase() : "Cours");
+      return tool.ajouterCours({ jour, txt });
+    }
+    return tool.planning({ jour: j ? j.charAt(0).toUpperCase()+j.slice(1) : null });
+  }
+
+  if (/avis|note|satisfaction|[ée]valuation|commentaire|retour/.test(s)) {
+    if (/ajout|cr[ée]|donne|met|mets|nouvel avis/.test(s)) {
+      const nom = extraireNom(q);
+      if (!nom) return { ok:false, msg:"Qui a laissé l'avis ?" };
+      const n = q.match(/([1-5])\s*\/\s*5/) || q.match(/note\s*:?\s*([1-5])/);
+      return tool.ajouterAvis({ nom, note: n ? n[1] : 5, txt: null });
+    }
+    return tool.avis();
+  }
+
+  if (/personnel|[ée]quipe|staff|coach|employ|salari|qui travaille/.test(s)) return tool.personnel();
+
+  if (/annonce|pr[ée]venir|informer|communiqu|message aux|publi(er|e)/.test(s)) {
+    if (/ajout|cr[ée]|publie|nouvelle annonce|annonce que/.test(s)) {
+      const t = q.replace(/^.*?(?:annonce[rz]?|publie[rz]?|communique[rz]?)\s*(?:que\s*)?/i, "").trim();
+      if (t.length < 4) return { ok:false, msg:"Que faut-il annoncer ?" };
+      return tool.ajouterAnnonce({ texte: t });
+    }
+    return tool.annonces();
+  }
+
+  if (/\bbon\b|bons|offert|gratuit|r[ée]duction|avantage|fid[ée]lit/.test(s)) {
+    if (/ajout|cr[ée]|donne|offre|nouveau bon/.test(s)) {
+      const nom = extraireNom(q);
+      if (!nom) return { ok:false, msg:"À qui offrir ce bon ?" };
+      const type = /r[ée]duction/.test(s) ? "Réduction" : "Séance offerte";
+      return tool.ajouterBon({ nom, type });
+    }
+    return tool.bons();
+  }
+
+  if (/texte|mod[èe]le|template|message type|relance type|r[ée]dige/.test(s)) return tool.textes();
+
+  if (/[ée]quipement|mat[ée]riel|machine|tapis|rameur|halt[èe]re|maintenance|panne/.test(s)) return tool.equipements();
+
+  if (/administratif|infos? du club|fiche club|param[èe]tre|configuration|cloisonn/.test(s)) return tool.administratif();
+
+  if (/rapport|bilan|synth[èe]se|r[ée]sum[ée]|[ée]tat des lieux|tableau de bord/.test(s)) return tool.rapports();
 
   /* aide */
   if (/(aide|comment|que peux|que sais|bonjour|salut|hello)/.test(s)) {
-    return { ok:true, msg:`Je gère **${clubOf(DB.club).nom}**. Dites-moi simplement :
+    return { ok:true, msg:`Je gère **${clubOf(DB.club).nom}** — les 15 modules sont branchés. Dites-moi simplement :
       <ul><li>« Marie Dossou a payé son mois »</li>
       <li>« Qui expire cette semaine ? »</li>
       <li>« Combien j'ai encaissé ? »</li>
       <li>« Ajoute Jean Dupont au 97 12 34 56 »</li>
-      <li>« Marie est arrivée »</li></ul>` };
+      <li>« Marie est arrivée »</li>
+      <li>« Le planning du mardi »</li>
+      <li>« Ajoute un cours de cardio mercredi 18h »</li>
+      <li>« Montre les avis » · « les équipements » · « le personnel »</li>
+      <li>« Publie une annonce : fermeture le 15 »</li>
+      <li>« Donne un bon à Marie Dossou »</li>
+      <li>« Le rapport du mois »</li></ul>` };
   }
 
   return {
     ok:false,
-    msg:`Je n'ai pas compris. Essayez : « Marie Dossou a payé son mois », « qui expire cette semaine », ou « combien j'ai encaissé ».`
+    msg:`Je n'ai pas compris. Essayez : « Marie Dossou a payé son mois », « qui expire cette semaine », « le planning du mardi », ou « montre les avis ».`
   };
 }
 
@@ -488,15 +759,15 @@ const MODS = [
   ["💰","Finances","combien j'ai encaissé"],
   ["✅","Présences","qui est présent aujourd'hui"],
   ["⏰","Échéances","qui expire cette semaine"],
-  ["📅","Planning",""],
-  ["⭐","Avis",""],
-  ["👤","Personnel",""],
-  ["📈","Rapports",""],
-  ["📢","Annonces",""],
-  ["🎫","Bons",""],
-  ["📝","Textes",""],
-  ["🛒","Équipements",""],
-  ["⚙️","Administratif",""]
+  ["📅","Planning","le planning de la semaine"],
+  ["⭐","Avis","montre les avis"],
+  ["👤","Personnel","le personnel"],
+  ["📈","Rapports","le rapport du mois"],
+  ["📢","Annonces","les annonces"],
+  ["🎫","Bons","les bons"],
+  ["📝","Textes","les modèles de messages"],
+  ["🛒","Équipements","les équipements"],
+  ["⚙️","Administratif","la fiche du club"]
 ];
 
 const grid = document.getElementById("grid");
