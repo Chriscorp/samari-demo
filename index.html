@@ -250,23 +250,34 @@ function seed() {
 }
 
 let DB = JSON.parse(localStorage.getItem(KEY) || "null") || seed();
+/* migration : si une sauvegarde ancienne n'a pas les nouveaux modules, on les ajoute */
+(function migrate(){
+  const base = seed();
+  let touched = false;
+  for (const k of ["membres","ops","pres","cours","avis","personnel","annonces","bons","textes","equipements"]) {
+    if (!Array.isArray(DB[k])) { DB[k] = base[k]; touched = true; }
+  }
+  if (!DB.club) { DB.club = base.club; touched = true; }
+  if (touched) localStorage.setItem(KEY, JSON.stringify(DB));
+})();
 const save = () => localStorage.setItem(KEY, JSON.stringify(DB));
 
 /* ═══ CLOISONNEMENT — point d'entrée unique ═══ */
 function scope() {
   const c = DB.club;
+  const g = k => Array.isArray(DB[k]) ? DB[k].filter(x => x.club_id === c) : [];
   return {
     club: c,
-    membres: DB.membres.filter(m => m.club_id === c),
-    ops:     DB.ops.filter(o => o.club_id === c),
-    pres:    DB.pres.filter(p => p.club_id === c),
-    cours:   DB.cours.filter(x => x.club_id === c),
-    avis:    DB.avis.filter(x => x.club_id === c),
-    personnel: DB.personnel.filter(x => x.club_id === c),
-    annonces: DB.annonces.filter(x => x.club_id === c),
-    bons:    DB.bons.filter(x => x.club_id === c),
-    textes:  DB.textes.filter(x => x.club_id === c),
-    equipements: DB.equipements.filter(x => x.club_id === c)
+    membres: g("membres"),
+    ops:     g("ops"),
+    pres:    g("pres"),
+    cours:   g("cours"),
+    avis:    g("avis"),
+    personnel: g("personnel"),
+    annonces: g("annonces"),
+    bons:    g("bons"),
+    textes:  g("textes"),
+    equipements: g("equipements")
   };
 }
 
@@ -667,7 +678,7 @@ function penser(q) {
 
   if (/[ée]quipement|mat[ée]riel|machine|tapis|rameur|halt[èe]re|maintenance|panne/.test(s)) return tool.equipements();
 
-  if (/administratif|infos? du club|fiche club|param[èe]tre|configuration|cloisonn/.test(s)) return tool.administratif();
+  if (/administratif|infos? du club|fiche du club|fiche club|param[èe]tre|configuration|cloisonn/.test(s)) return tool.administratif();
 
   if (/rapport|bilan|synth[èe]se|r[ée]sum[ée]|[ée]tat des lieux|tableau de bord/.test(s)) return tool.rapports();
 
