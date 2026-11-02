@@ -389,17 +389,22 @@ function penser(q) {
 /* ═══ RENDU ═══ */
 const chat = document.getElementById("chat");
 
+/* convertit **gras** en <b> et garde le reste du HTML */
+function md(s) {
+  return String(s).replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+}
+
 function bulle(qui, html) {
   const d = document.createElement("div");
   d.className = "msg " + (qui === "me" ? "me" : "ag");
-  d.innerHTML = html;
+  d.innerHTML = md(html);
   chat.appendChild(d);
   chat.scrollTop = chat.scrollHeight;
   return d;
 }
 
 function rendreReponse(r) {
-  let h = r.msg;
+  let h = md(r.msg);
   if (r.list && r.list.length) {
     h += `<div class="data">` + r.list.map(x =>
       `<div class="drow"><div><div class="n">${x.n}</div><div class="s">${x.s}</div></div>
