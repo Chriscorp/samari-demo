@@ -144,6 +144,7 @@ body{min-height:100vh;display:flex;flex-direction:column}
     <b id="clubName">Samari Club</b>
     <span id="clubSub">Porto-Novo · 1 salle</span>
   </div>
+  <select class="clubsw" id="usersw" onchange="switchUser(this.value)"></select>
   <select class="clubsw" id="clubsw" onchange="switchClub(this.value)"></select>
 </div>
 
@@ -179,10 +180,82 @@ const CLUBS = [
   { id: "samari-cotonou", nom: "Samari Cotonou", ville: "Cotonou" }
 ];
 
+/* ═══════════════════════════════════════════════════════════════
+   RÔLES ET UTILISATEURS
+   Le cloisonnement est PAR DÉFAUT : un rôle inconnu ne voit rien.
+   ═══════════════════════════════════════════════════════════════ */
+
+const ROLES = {
+  admin:    { libelle:"Admin",    desc:"Voit tout, décide de tout",           e:"👑" },
+  associe:  { libelle:"Associé",  desc:"Voit tout, aucune décision financière", e:"🤝" },
+  coach:    { libelle:"Coach",    desc:"Ses adhérents, exercices, machines",    e:"🏋️" },
+  adherent: { libelle:"Adhérent",  desc:"Uniquement ses propres données",      e:"🙋" }
+};
+
+const USERS = [
+  { id:"u1", nom:"Abou",          role:"admin",    club_id:"samari-porto" },
+  { id:"u2", nom:"Chris",         role:"associe",  club_id:"samari-porto" },
+  { id:"u3", nom:"Serge",         role:"coach",    club_id:"samari-porto", coach:"Serge" },
+  { id:"u4", nom:"Dossou Marie",  role:"adherent", club_id:"samari-porto", membre:"Dossou Marie" }
+];
+
+/* Matrice d'accès aux modules — par rôle. Rien n'est ouvert par défaut.
+   LECTURE : admin et associé voient tout ; coach et adhérent sont restreints.
+   DÉCISION : voir DROIT ci-dessous — l'associé lit les finances mais ne les engage pas. */
+const ACCES = {
+  tdb:           ["admin","associe"],
+  adherents:     ["admin","associe","coach"],
+  finances:      ["admin","associe"],
+  presences:     ["admin","associe","coach"],
+  echeances:     ["admin","associe"],
+  planning:      ["admin","associe","coach","adherent"],
+  avis:          ["admin","associe"],
+  personnel:     ["admin","associe"],
+  rapports:      ["admin","associe"],
+  annonces:      ["admin","associe","coach","adherent"],
+  bons:          ["admin","associe","coach"],
+  textes:        ["admin","associe","coach"],
+  equipements:   ["admin","associe","coach"],
+  exercices:     ["admin","associe","coach","adherent"],
+  administratif: ["admin","associe"]
+};
+
+function me() { return USERS.find(u => u.id === DB.user) || USERS[0]; }
+function role() { return me().role; }
+function peut(module) {
+  const ok = ACCES[module];
+  if (!ok) return false;                 /* module inconnu → refusé */
+  return ok.includes(role());            /* rôle inconnu → refusé */
+}
+function refus(action) {
+  return { ok:false, msg:`Action refusée. Votre rôle **${ROLES[role()].libelle}** ne permet pas ${action}.` };
+}
+
+/* ═══ QUI PEUT FAIRE QUOI ═══
+   Le rôle n'est pas décoratif : il conditionne l'ACTION, pas seulement l'affichage.
+   Associer ne peut lire les finances, mais ne peut rien encaisser ni dépenser. */
+const DROIT = {
+  ajouterMembre:  ["admin","associe"],
+  payer:          ["admin"],              /* décision financière → admin seul */
+  pointer:        ["admin","coach"],
+  ajouterCours:   ["admin","coach"],
+  ajouterAvis:    ["admin","associe"],
+  ajouterAnnonce: ["admin","associe"],
+  ajouterBon:     ["admin"],
+  ajouterExercice:["admin","coach"],
+  supprimer:      ["admin"]
+};
+function autorise(action) {
+  const l = DROIT[action];
+  if (!l) return true;                    /* lecture : filtre appliqué par scope() */
+  return l.includes(role());
+}
+
 function seed() {
   const now = Date.now(), d = n => now + n * 86400000;
   return {
     club: "samari-porto",
+    user: "u1",
     membres: [
       { id:1, club_id:"samari-porto", nom:"Ayaba Christelle", tel:"+229 97 12 34 56", form:"Mensuel", fin:d(18) },
       { id:2, club_id:"samari-porto", nom:"Dossou Marie", tel:"+229 96 45 78 12", form:"Mensuel", fin:d(4) },
@@ -242,9 +315,15 @@ function seed() {
       { id:2, club_id:"samari-porto", nom:"Bienvenue", txt:"Bienvenue {nom} au Samari Club !" }
     ],
     equipements: [
-      { id:1, club_id:"samari-porto", nom:"Tapis de course", etat:"Bon" },
-      { id:2, club_id:"samari-porto", nom:"Rameur", etat:"À réviser" },
-      { id:3, club_id:"samari-porto", nom:"Haltères 2–20 kg", etat:"Bon" }
+      { id:1, club_id:"samari-porto", nom:"Tapis de course", etat:"Bon", coach:"Serge" },
+      { id:2, club_id:"samari-porto", nom:"Rameur", etat:"À réviser", coach:"Serge" },
+      { id:3, club_id:"samari-porto", nom:"Haltères 2–20 kg", etat:"Bon", coach:"Abou" }
+    ],
+    exercices: [
+      { id:1, club_id:"samari-porto", membre:"Dossou Marie", coach:"Serge", nom:"Squat", series:"4×12", note:"genoux fragiles" },
+      { id:2, club_id:"samari-porto", membre:"Dossou Marie", coach:"Serge", nom:"Développé couché", series:"3×10", note:"" },
+      { id:3, club_id:"samari-porto", membre:"Ayaba Christelle", coach:"Serge", nom:"Rameur", series:"3×5 min", note:"cardio" },
+      { id:4, club_id:"samari-porto", membre:"Kpadonou Serge", coach:"Abou", nom:"Soulevé de terre", series:"5×5", note:"" }
     ]
   };
 }
@@ -258,32 +337,65 @@ let DB = JSON.parse(localStorage.getItem(KEY) || "null") || seed();
     if (!Array.isArray(DB[k])) { DB[k] = base[k]; touched = true; }
   }
   if (!DB.club) { DB.club = base.club; touched = true; }
+  if (!DB.user) { DB.user = base.user; touched = true; }
+  if (!Array.isArray(DB.exercices)) { DB.exercices = base.exercices; touched = true; }
   if (touched) localStorage.setItem(KEY, JSON.stringify(DB));
 })();
 const save = () => localStorage.setItem(KEY, JSON.stringify(DB));
 
-/* ═══ CLOISONNEMENT — point d'entrée unique ═══ */
+/* ═══ CLOISONNEMENT — point d'entrée unique ═══
+   Deux niveaux : le club (club_id), puis le rôle.
+   Un adhérent ne voit que SA ligne. Un coach ne voit que SES adhérents. */
 function scope() {
   const c = DB.club;
+  const r = role();
+  const u = me();
   const g = k => Array.isArray(DB[k]) ? DB[k].filter(x => x.club_id === c) : [];
+
+  const mine = list => {
+    if (r === "adherent") return list.filter(x => norm(x.nom || x.membre) === norm(u.membre));
+    if (r === "coach")     return list.filter(x => !x.coach || norm(x.coach) === norm(u.coach));
+    return list;
+  };
+
+  const membres = g("membres");
+  /* un adhérent ne voit que sa propre fiche */
+  const membresVisibles = r === "adherent"
+    ? membres.filter(m => norm(m.nom) === norm(u.membre))
+    : membres;
+
   return {
     club: c,
-    membres: g("membres"),
-    ops:     g("ops"),
-    pres:    g("pres"),
+    role: r,
+    user: u,
+    membres: membresVisibles,
+    ops:     peut("finances") ? g("ops") : [],
+    pres:    r === "adherent"
+               ? g("pres").filter(p => norm(p.membre) === norm(u.membre))
+               : g("pres"),
     cours:   g("cours"),
-    avis:    g("avis"),
-    personnel: g("personnel"),
+    avis:    r === "adherent"
+               ? g("avis").filter(a => norm(a.membre) === norm(u.membre))
+               : g("avis"),
+    personnel: peut("personnel") ? g("personnel") : [],
     annonces: g("annonces"),
-    bons:    g("bons"),
-    textes:  g("textes"),
-    equipements: g("equipements")
+    bons:    r === "adherent"
+               ? g("bons").filter(b => norm(b.membre) === norm(u.membre))
+               : g("bons"),
+    textes:  peut("textes") ? g("textes") : [],
+    equipements: peut("equipements") ? g("equipements") : [],
+    exercices: r === "adherent"
+               ? g("exercices").filter(e => norm(e.membre) === norm(u.membre))
+               : r === "coach"
+                 ? g("exercices").filter(e => !e.coach || norm(e.coach) === norm(u.coach))
+                 : g("exercices")
   };
 }
 
 /* ═══ OUTILS DE L'AGENT — il AGIT, il ne répond pas seulement ═══ */
 const tool = {
   ajouterMembre({ nom, tel, formule }) {
+    if (!autorise("ajouterMembre")) return refus("créer un adhérent");
     const s = scope();
     if (s.membres.some(m => norm(m.nom) === norm(nom)))
       return { ok:false, msg:`${nom} existe déjà dans ce club.` };
@@ -297,6 +409,7 @@ const tool = {
   },
 
   payer({ nom, montant }) {
+    if (!autorise("payer")) return refus("encaisser un paiement (décision financière)");
     const s = scope();
     const m = find(s.membres, nom);
     if (!m) return { ok:false, msg:`Je ne trouve pas **${nom}** dans ${clubOf(DB.club).nom}.` };
@@ -312,6 +425,7 @@ const tool = {
   },
 
   pointer({ nom }) {
+    if (!autorise("pointer")) return refus("pointer une présence");
     const s = scope();
     const m = find(s.membres, nom);
     if (!m) return { ok:false, msg:`Je ne trouve pas **${nom}** dans ce club.` };
@@ -399,6 +513,7 @@ const tool = {
   },
 
   ajouterCours({ jour, txt, coach }) {
+    if (!autorise("ajouterCours")) return refus("ajouter un cours");
     const jours7 = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"];
     const j = jours7.find(x => norm(x) === norm(jour));
     if (!j) return { ok:false, msg:`Quel jour ? (${jours7.slice(0,6).join(", ")})` };
@@ -423,6 +538,7 @@ const tool = {
   },
 
   ajouterAvis({ nom, note, txt }) {
+    if (!autorise("ajouterAvis")) return refus("enregistrer un avis");
     const s = scope();
     const m = find(s.membres, nom);
     const n = Math.max(1, Math.min(5, parseInt(note,10) || 5));
@@ -453,6 +569,7 @@ const tool = {
   },
 
   ajouterAnnonce({ texte }) {
+    if (!autorise("ajouterAnnonce")) return refus("publier une annonce");
     if (!texte || texte.length < 3) return { ok:false, msg:"Que faut-il annoncer ?" };
     DB.annonces.push({ id:Date.now(), club_id:DB.club, texte, jour:0 });
     save();
@@ -475,6 +592,7 @@ const tool = {
   },
 
   ajouterBon({ nom, type }) {
+    if (!autorise("ajouterBon")) return refus("créer un bon");
     const s = scope();
     const m = find(s.membres, nom);
     if (!m) return { ok:false, msg:`Je ne trouve pas **${nom}** dans ce club.` };
@@ -544,6 +662,49 @@ const tool = {
         { n:"Taux de présence", s:"aujourd'hui / adhérents", tag: actifs ? Math.round(pres/actifs*100)+" %" : "—", cls:"warn" }
       ]
     };
+  },
+
+  /* ═══ EXERCICES ═══ */
+  exercices() {
+    const s = scope();
+    if (!s.exercices.length) return { ok:true, msg:`Aucun exercice assigné à ${clubOf(DB.club).nom}.` };
+    return {
+      ok:true,
+      msg:`**${s.exercices.length} exercice(s)** assigné(s) :`,
+      list: s.exercices.map(e => ({
+        n: `${e.nom} — ${e.series}`,
+        s: `${e.membre} · coach ${e.coach}${e.note ? " · " + e.note : ""}`,
+        tag: "Assigné", cls: "ok"
+      }))
+    };
+  },
+
+  mesExercices() {
+    const s = scope();
+    const u = me();
+    const l = s.exercices.filter(e => norm(e.membre) === norm(u.membre));
+    if (!l.length) return { ok:true, msg:`Aucun exercice ne vous est assigné pour le moment.` };
+    return {
+      ok:true,
+      msg:`**Votre programme** — ${u.membre} :`,
+      list: l.map(e => ({
+        n: e.nom, s: `${e.series} · coach ${e.coach}${e.note ? " · " + e.note : ""}`,
+        tag: "À faire", cls: "warn"
+      }))
+    };
+  },
+
+  ajouterExercice({ nom, membre, series, note }) {
+    if (!autorise("ajouterExercice")) return refus("assigner un exercice");
+    const s = scope();
+    const m = find(s.membres, membre);
+    if (!m) return { ok:false, msg:`Je ne trouve pas **${membre}** dans ce club.` };
+    DB.exercices.push({
+      id: Date.now(), club_id: DB.club, membre: m.nom,
+      coach: me().coach || me().nom, nom, series: series || "3×10", note: note || ""
+    });
+    save();
+    return { ok:true, msg:`Exercice **${nom}** assigné à **${m.nom}** (${series || "3×10"}).` };
   }
 };
 
@@ -710,6 +871,21 @@ function penser(q) {
 
   if (/rapport|bilan|synth[èe]se|r[ée]sum[ée]|[ée]tat des lieux|tableau de bord/.test(s)) return tool.rapports();
 
+  if (/exercice|[ée]xercices|programme perso|entra[îi]nement perso|mes s[ée]ances|ce que je dois faire/.test(s)) {
+    if (/ajout|assign|donne|prescri|nouvel exercice/.test(s)) {
+      const nom = extraireNom(q);
+      const exo = q.match(/(squat|d[ée]velopp[ée]|soulev[ée]|traction|pompe|gainage|rameur|course|v[ée]lo|bench|curl|presse|abdo)/i);
+      if (!nom) return { ok:false, msg:"À quel adhérent assigner cet exercice ?" };
+      return tool.ajouterExercice({
+        nom: exo ? exo[1].charAt(0).toUpperCase()+exo[1].slice(1).toLowerCase() : "Exercice",
+        membre: nom,
+        series: (q.match(/(\d+\s*[×x]\s*\d+)/) || [])[1] || "3×10"
+      });
+    }
+    if (role() === "adherent") return tool.mesExercices();
+    return tool.exercices();
+  }
+
   /* aide */
   if (/(aide|comment|que peux|que sais|bonjour|salut|hello)/.test(s)) {
     return { ok:true, msg:`Je gère **${clubOf(DB.club).nom}** — les 15 modules sont branchés. Dites-moi simplement :
@@ -772,6 +948,21 @@ function send(txt) {
   if (r.ok && !/stats|lister|echeances|presences/.test(v)) refreshHeader();
 }
 
+/* ═══ UTILISATEURS / RÔLES ═══ */
+function switchUser(id) {
+  DB.user = id; save();
+  const u = me();
+  const c = clubOf(DB.club);
+  if (u.club_id !== DB.club) { DB.club = u.club_id; save(); document.getElementById("clubsw").value = DB.club; }
+  document.getElementById("clubName").textContent = c.nom;
+  refreshHeader();
+  renderGrid();
+  chat.innerHTML = "";
+  bulle("ag", `Vous êtes connecté en **${u.nom}** — rôle **${ROLES[u.role].libelle}**.
+    ${ROLES[u.role].desc}.
+    <ul>${MODS.filter(m => peut(m[0])).map(m => `<li>${m[2]}</li>`).join("")}</ul>`);
+}
+
 /* ═══ CLUBS ═══ */
 function switchClub(id) {
   DB.club = id; save();
@@ -786,41 +977,54 @@ function switchClub(id) {
 }
 
 function refreshHeader() {
-  const c = clubOf(DB.club), s = scope();
+  const c = clubOf(DB.club), s = scope(), u = me();
   document.getElementById("clubSub").textContent =
-    `${c.ville} · ${s.membres.filter(m=>jours(m.fin)>=0).length} actif(s)`;
+    `${u.nom} · ${ROLES[u.role].libelle} · ${s.membres.filter(m=>jours(m.fin)>=0).length} actif(s)`;
 }
 
-/* ═══ MODULES ═══ */
+/* ═══ MODULES — chaque entrée porte sa clé d'accès ═══ */
 const MODS = [
-  ["📊","Tableau de bord","combien j'ai d'adhérents"],
-  ["👥","Adhérents","liste tous les adhérents"],
-  ["💰","Finances","combien j'ai encaissé"],
-  ["✅","Présences","qui est présent aujourd'hui"],
-  ["⏰","Échéances","qui expire cette semaine"],
-  ["📅","Planning","le planning de la semaine"],
-  ["⭐","Avis","montre les avis"],
-  ["👤","Personnel","le personnel"],
-  ["📈","Rapports","le rapport du mois"],
-  ["📢","Annonces","les annonces"],
-  ["🎫","Bons","les bons"],
-  ["📝","Textes","les modèles de messages"],
-  ["🛒","Équipements","les équipements"],
-  ["⚙️","Administratif","la fiche du club"]
+  ["tdb",           "📊","Tableau de bord","combien j'ai d'adhérents"],
+  ["adherents",     "👥","Adhérents","liste tous les adhérents"],
+  ["finances",      "💰","Finances","combien j'ai encaissé"],
+  ["presences",     "✅","Présences","qui est présent aujourd'hui"],
+  ["echeances",     "⏰","Échéances","qui expire cette semaine"],
+  ["planning",      "📅","Planning","le planning de la semaine"],
+  ["exercices",     "📋","Exercices","mes exercices"],
+  ["avis",          "⭐","Avis","montre les avis"],
+  ["personnel",     "👤","Personnel","le personnel"],
+  ["rapports",      "📈","Rapports","le rapport du mois"],
+  ["annonces",      "📢","Annonces","les annonces"],
+  ["bons",          "🎫","Bons","les bons"],
+  ["textes",        "📝","Textes","les modèles de messages"],
+  ["equipements",   "🛒","Équipements","les équipements"],
+  ["administratif", "⚙️","Administratif","la fiche du club"]
 ];
 
 const grid = document.getElementById("grid");
-MODS.forEach(([e, nom, q]) => {
-  const b = document.createElement("button");
-  b.innerHTML = `<span class="e">${e}</span>${nom}`;
-  b.onclick = () => {
-    closeTools();
-    if (q) send(q);
-    else bulle("ag", `Le module **${nom}** n'est pas encore branché à l'assistant.`);
-  };
-  grid.appendChild(b);
-});
-function openTools(){ document.getElementById("tools").classList.add("on"); }
+
+function renderGrid() {
+  grid.innerHTML = "";
+  let n = 0;
+  MODS.forEach(([cle, e, nom, q]) => {
+    if (!peut(cle)) return;              /* rôle non autorisé → le module n'existe pas */
+    n++;
+    const b = document.createElement("button");
+    b.innerHTML = `<span class="e">${e}</span>${nom}`;
+    b.onclick = () => {
+      closeTools();
+      if (q) send(q);
+      else bulle("ag", `Le module **${nom}** n'est pas encore branché à l'assistant.`);
+    };
+    grid.appendChild(b);
+  });
+  if (!n) {
+    grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:#8a93a6;font-size:13px;padding:30px 0">
+      Aucun module accessible avec le rôle ${ROLES[role()].libelle}.</div>`;
+  }
+}
+
+function openTools(){ renderGrid(); document.getElementById("tools").classList.add("on"); }
 function closeTools(){ document.getElementById("tools").classList.remove("on"); }
 
 /* ═══ SUGGESTIONS ═══ */
@@ -848,16 +1052,26 @@ CLUBS.forEach(c => {
   sw.appendChild(o);
 });
 
+const usw = document.getElementById("usersw");
+USERS.forEach(u => {
+  const o = document.createElement("option");
+  o.value = u.id;
+  o.textContent = `${ROLES[u.role].e} ${u.nom}`;
+  if (u.id === DB.user) o.selected = true;
+  usw.appendChild(o);
+});
+
 const c0 = clubOf(DB.club);
+const u0 = me();
 document.getElementById("clubName").textContent = c0.nom;
 refreshHeader();
+renderGrid();
 
-bulle("ag", `Bonjour. Je gère **${c0.nom}**.
+const acces = MODS.filter(m => peut(m[0])).map(m => m[2]).join(" · ");
+bulle("ag", `Bonjour **${u0.nom}** — rôle **${ROLES[u0.role].libelle}**.
+Je gère **${c0.nom}**, et je ne vous montre que ce que votre rôle autorise.
 
-Dites-moi ce qu'il faut faire — je m'occupe du reste.
-<ul><li>« Marie Dossou a payé son mois »</li>
-<li>« Qui expire cette semaine ? »</li>
-<li>« Combien j'ai encaissé ? »</li></ul>`);
+Modules accessibles : ${acces}.`);
 
 /* saisie */
 const inp = document.getElementById("inp");
