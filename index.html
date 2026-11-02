@@ -583,6 +583,24 @@ function extraireNom(q) {
 function penser(q) {
   const s = norm(q);
 
+  /* ═══ PRIORITÉ 0 : le planning, avant tout le reste ═══
+     « ajoute un cours de cardio mercredi 18h » ne doit jamais
+     être pris pour la création d'un adhérent. */
+  if (/planning|\bcours\b|s[ée]ance|entra[îi]nement|programme/.test(s)) {
+    const j = ["lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"]
+      .find(x => s.includes(x));
+    if (/ajout|cr[ée]|programme|nouveau cours|planifie/.test(s)) {
+      if (!j) return { ok:false, msg:"Quel jour ? (Lundi, Mardi, Mercredi…)" };
+      const jour = j.charAt(0).toUpperCase()+j.slice(1);
+      const h = q.match(/(\d{1,2})\s*h\s*(\d{0,2})/);
+      const nomC = q.match(/(cardio|musculation|cross[\s-]?training|fitness|yoga|boxe|zumba|abdo|mobilit[ée]|danse)/i);
+      const txt = (h ? h[1]+"h"+(h[2]||"")+" — " : "") +
+        (nomC ? nomC[1].charAt(0).toUpperCase()+nomC[1].slice(1).toLowerCase() : "Cours");
+      return tool.ajouterCours({ jour, txt });
+    }
+    return tool.planning({ jour: j ? j.charAt(0).toUpperCase()+j.slice(1) : null });
+  }
+
   /* --- ACTIONS PRIORITAIRES --- */
 
   /* paiement */
