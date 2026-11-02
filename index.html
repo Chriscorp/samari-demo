@@ -676,8 +676,16 @@ function penser(q) {
 
   if (/annonce|pr[ée]venir|informer|communiqu|message aux|publi(er|e)/.test(s)) {
     if (/ajout|cr[ée]|publie|nouvelle annonce|annonce que/.test(s)) {
-      const m = q.match(/(?:annonce[rz]?|publie[rz]?|communique[rz]?)\s*(?:que\s*)?[:\s]\s*(.+)$/i);
-      const t = (m ? m[1] : q).trim();
+      /* on privilégie le mot « annonce », puis on nettoie les articles de tête */
+      let t = q;
+      const mAnn = q.match(/annonce[rz]?\s*(?:que\s*)?[:\s]\s*(.+)$/i);
+      const mPub = q.match(/(?:publie[rz]?|communique[rz]?)\s*(?:que\s*)?[:\s]\s*(.+)$/i);
+      if (mAnn) t = mAnn[1];
+      else if (mPub) t = mPub[1];
+      t = t.replace(/^(?:une?|la|les|des|le)\s+(?:nouvelle\s+)?annonce\s*/i, "")
+           .replace(/^(?:une?|la|les|des|le)\s+/i, "")
+           .replace(/^["«\s]+|[»"\s]+$/g, "")
+           .trim();
       if (t.length < 4) return { ok:false, msg:"Que faut-il annoncer ?" };
       return tool.ajouterAnnonce({ texte: t });
     }
